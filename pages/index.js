@@ -52,7 +52,7 @@ export default function Home() {
       ('for acmecorp.com on 1st january')
     )
 
-    await reclaimClient.buildProofRequest(providerId)
+    await reclaimClient.buildProofRequest(providerId, true, "V2Linking");
 
     reclaimClient.setSignature(
       await reclaimClient.generateSignature( // this is an MVP, you should not generate the signature on the frontend
