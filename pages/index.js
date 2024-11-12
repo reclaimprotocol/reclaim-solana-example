@@ -1,84 +1,87 @@
-import styles from '../styles/Home.module.css'
-import { useMemo, useState, useEffect } from 'react';
-import { ConnectionProvider, useWallet, WalletProvider } from '@solana/wallet-adapter-react';
-import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
+import styles from "../styles/Home.module.css";
+import { useMemo, useState, useEffect } from "react";
+import {
+  ConnectionProvider,
+  useWallet,
+  WalletProvider,
+} from "@solana/wallet-adapter-react";
+import { WalletAdapterNetwork } from "@solana/wallet-adapter-base";
 import {
   GlowWalletAdapter,
   PhantomWalletAdapter,
   SlopeWalletAdapter,
   SolflareWalletAdapter,
   TorusWalletAdapter,
-  BackpackWalletAdapter
-} from '@solana/wallet-adapter-wallets';
+  BackpackWalletAdapter,
+} from "@solana/wallet-adapter-wallets";
 import {
   WalletConnectButton,
   WalletModalProvider,
-  WalletMultiButton
-} from '@solana/wallet-adapter-react-ui';
-import { clusterApiUrl } from '@solana/web3.js';
-import '@solana/wallet-adapter-react-ui/styles.css';
-import VerifyProofButton from '../components/verify-proof';
-
-import { Reclaim } from "@reclaimprotocol/js-sdk";
+  WalletMultiButton,
+} from "@solana/wallet-adapter-react-ui";
+import { clusterApiUrl } from "@solana/web3.js";
+import "@solana/wallet-adapter-react-ui/styles.css";
+import VerifyProofButton from "../components/verify-proof";
+import { ReclaimProofRequest } from "@reclaimprotocol/js-sdk";
 import QRCode from "react-qr-code";
 
 export default function Home() {
-
   const [network, setNetwork] = useState(WalletAdapterNetwork.Devnet);
-
   const wallet = useWallet();
-
   const endpoint = useMemo(() => clusterApiUrl(network), [network]);
-
-  const wallets = useMemo(
-    () => [
-      new SolflareWalletAdapter({ network }),
-    ],
-    []
-  );
-
-  const [url, setUrl] = useState('')
+  const wallets = useMemo(() => [new SolflareWalletAdapter({ network })], []);
   const [ready, setReady] = useState(false);
   const [proof, setProof] = useState({});
+  const [reclaimProofRequest, setReclaimProofRequest] = useState(null);
+  const [requestUrl, setRequestUrl] = useState("");
+  const [statusUrl, setStatusUrl] = useState("");
 
-  const APP_ID = "0x408edDD2dF298C2F5df1E2eDE2eBF1278A96Ee45" //TODO: replace with your applicationId
-  const reclaimClient = new Reclaim.ProofRequest(APP_ID)
+  useEffect(() => {
+    async function initializeReclaim() {
+      const APP_ID = "0x6E0338a6D8594101Ea9e13840449242015d71B19"; // This is an example App Id Replace it with your App Id.
+      const APP_SECRET =
+        "0x1e0d6a6548b72286d747b4ac9f2ad6b07eba8ad6a99cb1191890ea3f77fae48f"; // This is an example App Secret Replace it with your App Secret.
+      const PROVIDER_ID = "6d3f6753-7ee6-49ee-a545-62f1b1822ae5"; // This is GitHub Provider Id Replace it with the provider id you want to use.
+
+      const proofRequest = await ReclaimProofRequest.init(
+        APP_ID,
+        APP_SECRET,
+        PROVIDER_ID
+      );
+      setReclaimProofRequest(proofRequest);
+    }
+
+    initializeReclaim();
+  }, []);
 
   async function generateVerificationRequest() {
-    const providerId = "1bba104c-f7e3-4b58-8b42-f8c0346cdeab" //TODO: replace with your provider ids you had selected while creating the application
+    if (!reclaimProofRequest) {
+      console.error("Reclaim Proof Request not initialized");
+      return;
+    }
+    const url = await reclaimProofRequest.getRequestUrl();
+    setRequestUrl(url);
+    const status = reclaimProofRequest.getStatusUrl();
+    setStatusUrl(status);
 
-    reclaimClient.addContext(
-      (`user's address`),
-      ('for acmecorp.com on 1st january')
-    )
+    reclaimProofRequest.addContext(
+      `user's address`,
+      "for acmecorp.com on 1st january"
+    );
 
-    await reclaimClient.buildProofRequest(providerId, true, "V2Linking");
-
-    reclaimClient.setSignature(
-      await reclaimClient.generateSignature( // this is an MVP, you should not generate the signature on the frontend
-        "0x5bdaf747ad9333898a0d9cb613f499d0b00164d7b8230628cf7ffa30fd323372" //TODO : replace with your APP_SECRET
-      )
-    )
-
-    const { requestUrl, statusUrl } =
-      await reclaimClient.createVerificationRequest()
-
-    setUrl(requestUrl)
-
-    await reclaimClient.startSession({
-      onSuccessCallback: proofs => {
-        console.log('Verification success', proofs)
+    await reclaimProofRequest.startSession({
+      onSuccessCallback: (proof) => {
+        console.log("Verification success", proof);
+        setProof(proof);
         setReady(true);
-        setProof(proofs[0]);
         // Your business logic here
       },
-      onFailureCallback: error => {
-        console.error('Verification failed', error)
+      onFailureCallback: (error) => {
+        console.error("Verification failed", error);
         // Your business logic here to handle the error
-      }
-    })
+      },
+    });
   }
-
 
   return (
     <div>
@@ -87,14 +90,12 @@ export default function Home() {
           <WalletModalProvider>
             <div className={styles.App}>
               <WalletMultiButton />
-              {!url && (
+              {!requestUrl && (
                 <button onClick={generateVerificationRequest}>
                   Create Claim QrCode
                 </button>
               )}
-              {url && (
-                <QRCode value={url} />
-              )}
+              {requestUrl && <QRCode value={requestUrl} />}
 
               {ready && <VerifyProofButton proof={proof} />}
             </div>
@@ -103,7 +104,4 @@ export default function Home() {
       </ConnectionProvider>
     </div>
   );
-
-
 }
-
